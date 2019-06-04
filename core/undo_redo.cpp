@@ -257,8 +257,7 @@ void UndoRedo::commit_action() {
 
 	committing++;
 	redo(); // perform action
-	
-	commiting--;
+	committing--;
 
 	//NEW
 	if (max_steps > 0 && actions.size() > max_steps) {
@@ -523,15 +522,6 @@ void UndoRedo::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("create_action", "name", "merge_mode"), &UndoRedo::create_action, DEFVAL(MERGE_DISABLE));
 	ClassDB::bind_method(D_METHOD("commit_action"), &UndoRedo::commit_action);
-	ClassDB::bind_method(D_METHOD("is_commiting_action"), &UndoRedo::is_commiting_action);
-	ClassDB::bind_method(D_METHOD("get_action_count"), &UndoRedo::get_action_count);
-	ClassDB::bind_method(D_METHOD("get_current_action"), &UndoRedo::get_current_action);
-	ClassDB::bind_method(D_METHOD("set_max_steps", "max_steps"), &UndoRedo::set_max_steps);
-	ClassDB::bind_method(D_METHOD("get_max_steps"), &UndoRedo::get_max_steps);
-
-	//ClassDB::bind_method(D_METHOD("add_do_method","p_object", "p_method", "VARIANT_ARG_LIST"),&UndoRedo::add_do_method);
-	//ClassDB::bind_method(D_METHOD("add_undo_method","p_object", "p_method", "VARIANT_ARG_LIST"),&UndoRedo::add_undo_method);
-
 	// FIXME: Typo in "commiting", fix in 4.0 when breaking compat.
 	ClassDB::bind_method(D_METHOD("is_commiting_action"), &UndoRedo::is_committing_action);
 
@@ -552,7 +542,10 @@ void UndoRedo::_bind_methods() {
 
 		ClassDB::bind_vararg_method(METHOD_FLAGS_DEFAULT, "add_undo_method", &UndoRedo::_add_undo_method, mi);
 	}
-
+	ClassDB::bind_method(D_METHOD("get_action_count"), &UndoRedo::get_action_count);
+	ClassDB::bind_method(D_METHOD("get_current_action"), &UndoRedo::get_current_action);
+	ClassDB::bind_method(D_METHOD("set_max_steps", "max_steps"), &UndoRedo::set_max_steps);
+	ClassDB::bind_method(D_METHOD("get_max_steps"), &UndoRedo::get_max_steps);
 	ClassDB::bind_method(D_METHOD("add_do_property", "object", "property", "value"), &UndoRedo::add_do_property);
 	ClassDB::bind_method(D_METHOD("add_undo_property", "object", "property", "value"), &UndoRedo::add_undo_property);
 	ClassDB::bind_method(D_METHOD("add_do_reference", "object"), &UndoRedo::add_do_reference);
