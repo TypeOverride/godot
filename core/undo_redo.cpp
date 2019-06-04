@@ -542,6 +542,7 @@ void UndoRedo::_bind_methods() {
 
 		ClassDB::bind_vararg_method(METHOD_FLAGS_DEFAULT, "add_undo_method", &UndoRedo::_add_undo_method, mi);
 	}
+
 	ClassDB::bind_method(D_METHOD("get_action_count"), &UndoRedo::get_action_count);
 	ClassDB::bind_method(D_METHOD("get_current_action"), &UndoRedo::get_current_action);
 	ClassDB::bind_method(D_METHOD("set_max_steps", "max_steps"), &UndoRedo::set_max_steps);
