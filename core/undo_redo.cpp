@@ -253,6 +253,15 @@ void UndoRedo::commit_action() {
 	commiting++;
 	redo(); // perform action
 	commiting--;
+
+	//NEW
+	if (max_steps > 0 && actions.size() > max_steps) {
+		//clear early steps
+		while (actions.size() > max_steps)
+			_pop_history_tail();
+	}
+	//NEW
+
 	if (callback && actions.size() > 0) {
 		callback(callback_ud, actions[actions.size() - 1].name);
 	}
@@ -395,6 +404,7 @@ UndoRedo::UndoRedo() {
 	version = 1;
 	action_level = 0;
 	current_action = -1;
+	max_steps = -1;
 	merge_mode = MERGE_DISABLE;
 	callback = NULL;
 	callback_ud = NULL;
@@ -486,11 +496,31 @@ Variant UndoRedo::_add_undo_method(const Variant **p_args, int p_argcount, Varia
 	return Variant();
 }
 
+int UndoRedo::get_action_count() const {
+	return actions.size();
+}
+
+int UndoRedo::get_current_action() const {
+	return current_action;
+}
+
+void UndoRedo::set_max_steps(int p_max_steps) {
+	max_steps = p_max_steps;
+}
+
+int UndoRedo::get_max_steps() const {
+	return max_steps;
+}
+
 void UndoRedo::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("create_action", "name", "merge_mode"), &UndoRedo::create_action, DEFVAL(MERGE_DISABLE));
 	ClassDB::bind_method(D_METHOD("commit_action"), &UndoRedo::commit_action);
 	ClassDB::bind_method(D_METHOD("is_commiting_action"), &UndoRedo::is_commiting_action);
+	ClassDB::bind_method(D_METHOD("get_action_count"), &UndoRedo::get_action_count);
+	ClassDB::bind_method(D_METHOD("get_current_action"), &UndoRedo::get_current_action);
+	ClassDB::bind_method(D_METHOD("set_max_steps", "max_steps"), &UndoRedo::set_max_steps);
+	ClassDB::bind_method(D_METHOD("get_max_steps"), &UndoRedo::get_max_steps);
 
 	//ClassDB::bind_method(D_METHOD("add_do_method","p_object", "p_method", "VARIANT_ARG_LIST"),&UndoRedo::add_do_method);
 	//ClassDB::bind_method(D_METHOD("add_undo_method","p_object", "p_method", "VARIANT_ARG_LIST"),&UndoRedo::add_undo_method);

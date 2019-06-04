@@ -42,7 +42,7 @@ void MeshInstance::set_blend_amount(const StringName &p_name, float p_amount) {
 } //NEW
 
 void MeshInstance::reset_blend_amount(const StringName &p_name) {
-	set("blend_shapes/" + p_name, Variant(0.0f));
+	set_blend_amount(p_name, 0.0f);
 } //NEW
 
 void MeshInstance::reset_all_blend_amounts() {
@@ -51,7 +51,7 @@ void MeshInstance::reset_all_blend_amounts() {
 		mesh->get_blend_shape_list(&blend_shapes);
 
 		for (int i = 0; i < blend_shapes.size(); i++) {
-			reset_blend_amount(blend_shapes[0]);
+			reset_blend_amount(blend_shapes[i]);
 		}
 	}
 } //NEW
@@ -390,6 +390,8 @@ void MeshInstance::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_surface_material", "surface"), &MeshInstance::get_surface_material);
 
 	ClassDB::bind_method(D_METHOD("set_blend_amount", "name", "amount"), &MeshInstance::set_blend_amount);
+	ClassDB::bind_method(D_METHOD("reset_blend_amount", "name"), &MeshInstance::reset_blend_amount);
+	ClassDB::bind_method(D_METHOD("reset_all_blend_amounts"), &MeshInstance::reset_all_blend_amounts);
 
 	ClassDB::bind_method(D_METHOD("create_trimesh_collision"), &MeshInstance::create_trimesh_collision);
 	ClassDB::set_method_flags("MeshInstance", "create_trimesh_collision", METHOD_FLAGS_DEFAULT);

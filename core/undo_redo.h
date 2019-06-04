@@ -79,6 +79,7 @@ private:
 	Vector<Action> actions;
 	int current_action;
 	int action_level;
+	int max_steps;
 	MergeMode merge_mode;
 	uint64_t version;
 
@@ -123,6 +124,12 @@ public:
 
 	void set_method_notify_callback(MethodNotifyCallback p_method_callback, void *p_ud);
 	void set_property_notify_callback(PropertyNotifyCallback p_property_callback, void *p_ud);
+
+	int get_action_count() const;
+	int get_current_action() const;
+
+	void set_max_steps(int p_max_steps);
+	int get_max_steps() const; //uint64_t
 
 	UndoRedo();
 	~UndoRedo();
