@@ -90,7 +90,7 @@ void UndoRedo::create_action(const String &p_name, MergeMode p_mode) {
 			actions.write[actions.size() - 1].last_tick = ticks;
 
 			merge_mode = p_mode;
-
+			merging = true;
 		} else {
 
 			Action new_action;
@@ -239,8 +239,8 @@ void UndoRedo::_pop_history_tail() {
 	}
 }
 
-bool UndoRedo::is_commiting_action() const {
-	return commiting > 0;
+bool UndoRedo::is_committing_action() const {
+	return committing > 0;
 }
 
 void UndoRedo::commit_action() {
@@ -250,8 +250,14 @@ void UndoRedo::commit_action() {
 	if (action_level > 0)
 		return; //still nested
 
-	commiting++;
+	if (merging) {
+		version--;
+		merging = false;
+	}
+
+	committing++;
 	redo(); // perform action
+	
 	commiting--;
 
 	//NEW
@@ -400,12 +406,13 @@ void UndoRedo::set_property_notify_callback(PropertyNotifyCallback p_property_ca
 
 UndoRedo::UndoRedo() {
 
-	commiting = 0;
+	committing = 0;
 	version = 1;
 	action_level = 0;
 	current_action = -1;
 	max_steps = -1;
 	merge_mode = MERGE_DISABLE;
+	merging = false;
 	callback = NULL;
 	callback_ud = NULL;
 
@@ -524,6 +531,9 @@ void UndoRedo::_bind_methods() {
 
 	//ClassDB::bind_method(D_METHOD("add_do_method","p_object", "p_method", "VARIANT_ARG_LIST"),&UndoRedo::add_do_method);
 	//ClassDB::bind_method(D_METHOD("add_undo_method","p_object", "p_method", "VARIANT_ARG_LIST"),&UndoRedo::add_undo_method);
+
+	// FIXME: Typo in "commiting", fix in 4.0 when breaking compat.
+	ClassDB::bind_method(D_METHOD("is_commiting_action"), &UndoRedo::is_committing_action);
 
 	{
 		MethodInfo mi;
