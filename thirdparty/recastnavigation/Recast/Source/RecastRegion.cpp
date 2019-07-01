@@ -1333,6 +1333,61 @@ struct rcSweepSpan
 	unsigned short nei;	// neighbour id
 };
 
+///*
+/// @par
+///
+/// See the #rcConfig documentation for more information on the configuration parameters.
+///
+/// The region data will be available via the rcCompactHeightfield::maxRegions
+/// and rcCompactSpan::reg fields.
+///
+/// @warning The distance field must be created using #rcBuildDistanceField before attempting to build regions.
+///
+/// @see rcCompactHeightfield, rcCompactSpan, rcBuildDistanceField, rcBuildRegionsMonotone, rcConfig
+bool rcBuildRegionsStationary(rcContext *ctx, rcCompactHeightfield &chf,
+		const int borderSize, const int minRegionArea, const int mergeRegionArea) {
+	rcAssert(ctx);
+
+	rcScopedTimer timer(ctx, RC_TIMER_BUILD_REGIONS);
+
+	const int w = chf.width;
+	const int h = chf.height;
+	unsigned short id = 1;
+
+	rcScopedDelete<unsigned short> srcReg((unsigned short *)rcAlloc(sizeof(unsigned short) * chf.spanCount, RC_ALLOC_TEMP));
+	if (!srcReg) {
+		ctx->log(RC_LOG_ERROR, "rcBuildRegionsStationary: Out of memory 'src' (%d).", chf.spanCount);
+		return false;
+	}
+	memset(srcReg, 0, sizeof(unsigned short) * chf.spanCount);
+
+	const int nsweeps = rcMax(chf.width, chf.height);
+	rcScopedDelete<rcSweepSpan> sweeps((rcSweepSpan *)rcAlloc(sizeof(rcSweepSpan) * nsweeps, RC_ALLOC_TEMP));
+	if (!sweeps) {
+		ctx->log(RC_LOG_ERROR, "rcBuildRegionsStationary: Out of memory 'sweeps' (%d).", nsweeps);
+		return false;
+	}
+
+	{
+		rcScopedTimer timerFilter(ctx, RC_TIMER_BUILD_REGIONS_FILTER);
+
+		// Merge regions and filter out small regions.
+		rcIntArray overlaps;
+		chf.maxRegions = id;
+		if (!mergeAndFilterRegions(ctx, minRegionArea, mergeRegionArea, chf.maxRegions, chf, srcReg, overlaps))
+			return false;
+
+		// Monotone partitioning does not generate overlapping regions.
+	}
+
+	// Store the result out.
+	for (int i = 0; i < chf.spanCount; ++i)
+		chf.spans[i].reg = srcReg[i];
+
+	return true;
+}
+//*/
+
 /// @par
 /// 
 /// Non-null regions will consist of connected, non-overlapping walkable spans that form a single contour.

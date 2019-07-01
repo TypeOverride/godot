@@ -45,6 +45,10 @@
 #include "scene/resources/shape.h"
 #include "scene/resources/sphere_shape.h"
 
+#ifdef MODULE_CSG_ENABLED
+#include "modules/csg/csg_shape.h"
+#endif
+
 EditorNavigationMeshGenerator *EditorNavigationMeshGenerator::singleton = NULL;
 
 void EditorNavigationMeshGenerator::_add_vertex(const Vector3 &p_vec3, Vector<float> &p_verticies) {
@@ -123,16 +127,33 @@ void EditorNavigationMeshGenerator::_add_faces(const PoolVector3Array &p_faces, 
 	}
 }
 
-void EditorNavigationMeshGenerator::_parse_geometry(Transform p_accumulated_transform, Node *p_node, Vector<float> &p_verticies, Vector<int> &p_indices, int p_generate_from, uint32_t p_collision_mask) {
+void EditorNavigationMeshGenerator::_parse_geometry(Transform p_accumulated_transform, Node *p_node, Vector<float> &p_verticies, Vector<int> &p_indices, int p_generate_from, uint32_t p_collision_mask, int bake_selection_mode, Set<Node *> *_processedNodes, const StringName &navmesh_groupname) {
 
 	if (Object::cast_to<MeshInstance>(p_node) && p_generate_from != NavigationMesh::PARSED_GEOMETRY_STATIC_COLLIDERS) {
 
 		MeshInstance *mesh_instance = Object::cast_to<MeshInstance>(p_node);
 		Ref<Mesh> mesh = mesh_instance->get_mesh();
-		if (mesh.is_valid()) {
-			_add_mesh(mesh, p_accumulated_transform * mesh_instance->get_transform(), p_verticies, p_indices);
+		if (mesh.is_valid() && (!_processedNodes || !_processedNodes->has(p_node)) && (bake_selection_mode == NavigationMeshInstance::BAKE_SELECTION_MODE_NAVMESH_CHILDREN || bake_selection_mode == NavigationMeshInstance::BAKE_SELECTION_MODE_GROUPS_WITH_CHILDREN || p_node->is_in_group(navmesh_groupname))) {
+			if (_processedNodes)
+				_processedNodes->insert(p_node);
+
+			_add_mesh(mesh, p_accumulated_transform * mesh_instance->get_global_transform(), p_verticies, p_indices);
 		}
 	}
+
+#ifdef MODULE_CSG_ENABLED
+	if (Object::cast_to<CSGShape>(p_node) && p_generate_from != NavigationMesh::PARSED_GEOMETRY_STATIC_COLLIDERS) {
+
+		CSGShape *csg_shape = Object::cast_to<CSGShape>(p_node);
+		Array meshes = csg_shape->get_meshes();
+		if (!meshes.empty()) {
+			Ref<Mesh> mesh = meshes[1];
+			if (mesh.is_valid()) {
+				_add_mesh(mesh, p_accumulated_transform * csg_shape->get_global_transform(), p_verticies, p_indices);
+			}
+		}
+	}
+#endif
 
 	if (Object::cast_to<StaticBody>(p_node) && p_generate_from != NavigationMesh::PARSED_GEOMETRY_MESH_INSTANCES) {
 		StaticBody *static_body = Object::cast_to<StaticBody>(p_node);
@@ -222,14 +243,20 @@ void EditorNavigationMeshGenerator::_parse_geometry(Transform p_accumulated_tran
 		}
 	}
 
+	/* //if (bake_selection_mode == NavigationMeshInstance::BAKE_SELECTION_MODE_NAVMESH_CHILDREN) {
 	if (Object::cast_to<Spatial>(p_node)) {
 
 		Spatial *spatial = Object::cast_to<Spatial>(p_node);
 		p_accumulated_transform = p_accumulated_transform * spatial->get_transform();
 	}
+	*/
 
 	for (int i = 0; i < p_node->get_child_count(); i++) {
-		_parse_geometry(p_accumulated_transform, p_node->get_child(i), p_verticies, p_indices, p_generate_from, p_collision_mask);
+		if (bake_selection_mode != NavigationMeshInstance::BAKE_SELECTION_MODE_GROUPS_EXPLICIT) {
+			for (int i = 0; i < p_node->get_child_count(); i++) {
+				_parse_geometry(p_accumulated_transform, p_node->get_child(i), p_verticies, p_indices, p_generate_from, p_collision_mask, bake_selection_mode, _processedNodes, navmesh_groupname);
+			}
+		}
 	}
 }
 
@@ -253,9 +280,13 @@ void EditorNavigationMeshGenerator::_convert_detail_mesh_to_native_navigation_me
 			Vector<int> nav_indices;
 			nav_indices.resize(3);
 			// Polygon order in recast is opposite than godot's
-			nav_indices.write[0] = ((int)(bverts + tris[j * 4 + 0]));
-			nav_indices.write[1] = ((int)(bverts + tris[j * 4 + 2]));
-			nav_indices.write[2] = ((int)(bverts + tris[j * 4 + 1]));
+			//nav_indices.write[0] = ((int)(bverts + tris[j * 4 + 0]));
+			//nav_indices.write[1] = ((int)(bverts + tris[j * 4 + 2]));
+			//nav_indices.write[2] = ((int)(bverts + tris[j * 4 + 1]));
+			nav_indices.write[2] = ((int)(bverts + tris[j * 4 + 0]));
+			nav_indices.write[1] = ((int)(bverts + tris[j * 4 + 1]));
+			nav_indices.write[0] = ((int)(bverts + tris[j * 4 + 2]));
+
 			p_nav_mesh->add_polygon(nav_indices);
 		}
 	}
@@ -404,33 +435,93 @@ void EditorNavigationMeshGenerator::bake(Ref<NavigationMesh> p_nav_mesh, Node *p
 	Vector<float> vertices;
 	Vector<int> indices;
 
-	_parse_geometry(Object::cast_to<Spatial>(p_node)->get_transform().affine_inverse(), p_node, vertices, indices, p_nav_mesh->get_parsed_geometry_type(), p_nav_mesh->get_collision_mask());
+	NavigationMeshInstance *navigationMeshInstance = Object::cast_to<NavigationMeshInstance>(p_node);
+	int bake_selection_mode = navigationMeshInstance->get_bake_selection_mode();
+	StringName navmesh_groupname = navigationMeshInstance->get_navmesh_groupname();
+
+	if (bake_selection_mode == NavigationMeshInstance::BAKE_SELECTION_MODE_NAVMESH_CHILDREN) { // use all mesh-based-children of the navigationmeshinstance-node
+		_parse_geometry(Object::cast_to<Spatial>(p_node)->get_global_transform().affine_inverse(), p_node, vertices, indices, p_nav_mesh->get_parsed_geometry_type(), p_nav_mesh->get_collision_mask());
+
+	} else {
+		// get nodes based on group
+		List<Node *> groupNodes;
+		Set<Node *> processedNodes;
+
+		// retrieve all nodes in the current tree that are in the group specified by the navmesh_groupname-parameter
+		p_node->get_tree()->get_nodes_in_group(navmesh_groupname, &groupNodes);
+		for (const List<Node *>::Element *E = groupNodes.front(); E; E = E->next()) {
+			Node *groupNode = E->get();
+			_parse_geometry(Object::cast_to<Spatial>(p_node)->get_transform().affine_inverse(), groupNode, vertices, indices, p_nav_mesh->get_parsed_geometry_type(), p_nav_mesh->get_collision_mask(), bake_selection_mode, &processedNodes, navmesh_groupname);
+		}
+	}
 
 	if (vertices.size() > 0 && indices.size() > 0) {
+		if (p_nav_mesh->get_sample_partition_type() == NavigationMesh::SAMPLE_PARTITION_STATIONARY) {
+			if (p_nav_mesh.is_valid()) {
+				p_nav_mesh->clear_polygons();
+				p_nav_mesh->set_vertices(PoolVector<Vector3>());
 
-		rcHeightfield *hf = NULL;
-		rcCompactHeightfield *chf = NULL;
-		rcContourSet *cset = NULL;
-		rcPolyMesh *poly_mesh = NULL;
-		rcPolyMeshDetail *detail_mesh = NULL;
+				ep.step(TTR("."), 1);
+				ep.step(TTR(".."), 2);
+				ep.step(TTR("..."), 3);
+				ep.step(TTR("...."), 4);
+				ep.step(TTR("....."), 5);
+				ep.step(TTR("......"), 6);
+				ep.step(TTR("......."), 7);
+				ep.step(TTR("........"), 8);
+				ep.step(TTR("........."), 9);
+				ep.step(TTR(".........."), 10);
 
-		_build_recast_navigation_mesh(p_nav_mesh, &ep, hf, chf, cset, poly_mesh, detail_mesh, vertices, indices);
+				const float *verts = vertices.ptr();
+				const int nverts = vertices.size() / 3;
+				const int *tris = indices.ptr();
+				const int ntris = indices.size() / 3;
 
-		rcFreeHeightField(hf);
-		hf = 0;
+				PoolVector<Vector3> nav_vertices;
 
-		rcFreeCompactHeightfield(chf);
-		chf = 0;
+				for (int i = 0; i < nverts; i++) {
+					const float *v = &verts[i * 3];
+					nav_vertices.append(Vector3(v[0], v[1], v[2]));
+				}
+				p_nav_mesh->set_vertices(nav_vertices);
 
-		rcFreeContourSet(cset);
-		cset = 0;
+				for (unsigned int j = 0; j < ntris; j++) {
+					Vector<int> nav_indices;
+					nav_indices.resize(3);
 
-		rcFreePolyMesh(poly_mesh);
-		poly_mesh = 0;
+					nav_indices.write[2] = tris[j*3 + 0];
+					nav_indices.write[1] = tris[j*3 + 1];
+					nav_indices.write[0] = tris[j*3 + 2];
+					p_nav_mesh->add_polygon(nav_indices);
+				}
+			}
 
-		rcFreePolyMeshDetail(detail_mesh);
-		detail_mesh = 0;
-	}
+		} else {
+			rcHeightfield *hf = NULL;
+			rcCompactHeightfield *chf = NULL;
+			rcContourSet *cset = NULL;
+			rcPolyMesh *poly_mesh = NULL;
+			rcPolyMeshDetail *detail_mesh = NULL;
+
+			_build_recast_navigation_mesh(p_nav_mesh, &ep, hf, chf, cset, poly_mesh, detail_mesh, vertices, indices);
+
+			rcFreeHeightField(hf);
+			hf = 0;
+
+			rcFreeCompactHeightfield(chf);
+			chf = 0;
+
+			rcFreeContourSet(cset);
+			cset = 0;
+
+			rcFreePolyMesh(poly_mesh);
+			poly_mesh = 0;
+
+			rcFreePolyMeshDetail(detail_mesh);
+			detail_mesh = 0;
+		}
+	} 
+	
 	ep.step(TTR("Done!"), 11);
 }
 
